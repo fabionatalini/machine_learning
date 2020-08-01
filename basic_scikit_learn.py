@@ -1,6 +1,4 @@
-# MACHINE LEARNING EXERCISE WITH PYTHON
-
-#import modules
+#import relevant modules
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -9,22 +7,22 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 import matplotlib.pyplot as plt
 import copy
-import random
 
-#get the file
+#input file
 path="C:/Users/fabnatal/Documents/Python Scripts"
 input_file_name="Churn_Modelling.csv"
 
-#read in the data
 datos=pd.read_csv(path+"/"+input_file_name)
 
 print("The shape of the input dataset is "+str(datos.shape))
 print(datos.head)
 print(datos.dtypes)
 
-#dummy variables
+#see the unique values of the categorical variables
 print(datos["Geography"].unique())
+print(datos["Gender"].unique())
 
+#make dummy variables
 mylist=list()
 for i in range(len(datos["Geography"])):
     if datos["Geography"][i]=="France":
@@ -32,18 +30,22 @@ for i in range(len(datos["Geography"])):
     else:
         mylist.append(0)
 datos["France"]=mylist
+del(mylist,i)
 
+#another way to build the dummy variable
 datos["Spain"]=np.where(datos["Geography"]=="Spain",1,0)
 
 datos=datos.drop(columns="Geography")
-del(mylist,i)
 
-print(datos["Gender"].unique())
 datos["Female"]=np.where(datos["Gender"]=="Female",1,0)
 datos=datos.drop(columns="Gender")
 
-clientes=datos.iloc[:,[0,1]]
+clients=datos.iloc[:,[0,1]]
 datos=datos.drop(columns=["Name","Surname"])
+
+print("The shape of the input dataset is "+str(datos.shape))
+print(datos.head)
+print(datos.dtypes)
 
 #split the data into train and test sets
 X_train, X_test, y_train, y_test = train_test_split(
@@ -55,7 +57,7 @@ print("X_test shape: "+str(X_test.shape))
 print("y_train shape: "+str(y_train.shape))
 print("y_test shape: "+str(y_test.shape))
 
-#target rates
+#define a function to calculate the target rates
 def print_rate(df,target_name):
     if len(df.shape)==2:
         conteo=(df[target_name].value_counts() / df[target_name].value_counts().sum())
@@ -69,74 +71,68 @@ print(print_rate(datos,"Exited"))
 print(print_rate(y_train,"Exited"))
 print(print_rate(y_test,"Exited"))
 
-
-
-################### train/test #####################
-
+#prepare a pipeline to train and test three models.
+#First, we will define a dictionary which will contain the names of the three algorithms and the corresponding python commands. 
+#We will update this dictionary with accuracy values obtained from the train and test processes. 
+#Moreover, we will define a function to visually compare the performances of the three methods.
 methods_dict={"method":["KNN","LogReg","Tree"],
-             "command":["KNeighborsClassifier()","LogisticRegression()","DecisionTreeClassifier(random_state=123)"]}
+             "command":["KNeighborsClassifier()","LogisticRegression()","DecisionTreeClassifier(random_state=123)"],
+             "train_accuracy":[],
+             "test_accuracy":[]}
 
-
-#predictions is a DataFrame with two columns (named 0 and 1, in this order)
-#target is an list with the real values of the target variable in the test dataset
-def lift(predictions,target,quantiles):
-    predictions["real"]=target
-    random.seed(123)
-    predictions["aleatory"]=random.sample(range(len(predictions)),len(predictions))
-    predictions=predictions.iloc[:,1:4]
-    predictions=predictions.sort_values(by=[1,"aleatory"],ascending=False)
-    bins=pd.cut(np.array(range(len(predictions))),quantiles,right=True,labels=False)
-    predictions["bins"]=bins
-    results=predictions.groupby(by="bins",axis=0,as_index=False).sum()
-    results["sample_size"]=predictions.groupby(by="bins",axis=0,as_index=False).count().iloc[:,1]
-    results["real_cumsum"]=np.cumsum(results["real"])
-    results["real_cumsum_rate"]=(results["real_cumsum"])/sum(target)
-    mean_rate=sum(target)/len(results)
-    results["mean_rate"]=mean_rate
-    results["lift"]=results["real"]/mean_rate
-    mylist=[]
-    for i in range(len(results)):
-        mylist.append((results["real_cumsum"][i])/(mean_rate*(i+1)))
-    results["lift_cum"]=mylist
-    results=results.drop(columns=[1,"aleatory"])
-    return results
-
-
-
-#arg1 is a DataFrame created with the function lift
-def plot_lift(arg1):
-    fig,ax=plt.subplots(1,2)
-    positions=(np.arange(len(arg1["lift_cum"])))+1
-    ax[0].set_xlim(right=max(arg1["lift_cum"])+1)
-    ax[0].barh(y=positions,width=arg1["lift_cum"])
-    ax[0].set_xlabel("Cumulated lift")
-    ax[0].set_ylabel("Bins")
-    ax[0].set_title("Lift")
-    for y, x in enumerate(arg1["lift_cum"]):
-        ax[0].text(x+0.1, y+1, str(round(x,2)))
-    ax[1].set_xlim(right=max(arg1["real_cumsum_rate"])+1)
-    ax[1].barh(y=positions,width=arg1["real_cumsum_rate"])
-    ax[1].set_xlabel("Cumulated captured target")
-    ax[1].set_title("Captured target")
-    for y, x in enumerate(arg1["real_cumsum_rate"]):
-        ax[1].text(x+0.1, y+1, str(round(x,2)))
-    plt.show()
-
-    
 def train_test_models(summary_models):
     for i in range(len(summary_models["command"])):
         newStr=(summary_models["method"][i])
         print("Train/test with {foo}".format(foo=newStr))
-        clf=eval(methods_dict["command"][i])
+        clf=eval(summary_models["command"][i])
         clf.fit(X_train, y_train)
-        pred=pd.DataFrame(clf.predict_proba(X_test))
-        results=lift(predictions=pred,target=list(y_test),quantiles=10)
-        plot_lift(results)
+        train_score=round(clf.score(X_train, y_train),5)
+        y_pred=clf.predict(X_test)
+        test_score=round((sum(y_pred==y_test) / len(y_test)),5)
+        summary_models["train_accuracy"].append(train_score)
+        summary_models["test_accuracy"].append(test_score)
 
 train_test_models(methods_dict)
+#"https://machinelearningmastery.com/how-to-fix-futurewarning-messages-in-scikit-learn/"
 
+def see_accuracy(summary_models):
+    fig,ax=plt.subplots()
+    ax.plot(summary_models["train_accuracy"],color="b",linestyle="--",marker="o")
+    ax.plot(summary_models["test_accuracy"],color="r",marker="v")
+    ax.set_xticks([0,1,2],minor=False)
+    ax.set_xticklabels(summary_models["method"])
+    ax.set_xlabel("Method")
+    ax.set_ylabel("Accuracy")
+    plt.show()
+
+see_accuracy(methods_dict)
+
+#introduce the argument "max_depth" to limit the depth of the tree, and set it equal to 5 (this is arbitrary).
+#First, we will create a copy of the dictionary we created earlier, and we will update its elemets. 
+#Then we will use the fuctions defined above to train and test the models, and to display the results.
 methods_dict_2=copy.deepcopy(methods_dict)
 methods_dict_2["command"][2]=methods_dict_2["command"][2].replace(")",",max_depth=5)")
+methods_dict_2["train_accuracy"]=[]
+methods_dict_2["test_accuracy"]=[]
 print(methods_dict_2)
 
 train_test_models(methods_dict_2)
+
+see_accuracy(methods_dict_2)
+
+#compare the results on a same plot sharing the scale of the y axis:
+fig,ax=plt.subplots(1,2,sharey=True)
+ax[0].plot(methods_dict["train_accuracy"],color="b",linestyle="--",marker="o")
+ax[0].plot(methods_dict["test_accuracy"],color="r",marker="v")
+ax[0].set_title("'Overfitted Tree' method")
+ax[0].set_xticks([0,1,2],minor=False)
+ax[0].set_xticklabels(methods_dict["method"])
+ax[0].set_xlabel("Method")
+ax[0].set_ylabel("Accuracy")
+ax[1].plot(methods_dict_2["train_accuracy"],color="b",linestyle="--",marker="o")
+ax[1].plot(methods_dict_2["test_accuracy"],color="r",marker="v")
+ax[1].set_title("'Pruned Tree' method")
+ax[1].set_xticks([0,1,2],minor=False)
+ax[1].set_xticklabels(methods_dict["method"])
+ax[1].set_xlabel("Method")
+plt.show()
